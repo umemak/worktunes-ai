@@ -1,0 +1,79 @@
+{
+  "name": "worktunes-ai",
+  "version": "0.1.0",
+  "description": "環境適応型作業用BGM生成プラットフォーム",
+  "private": true,
+  "author": {
+    "name": "WorkTunes AI Team",
+    "email": "team@worktunes.ai"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/[USERNAME]/worktunes-ai.git"
+  },
+  "keywords": [
+    "ai",
+    "music",
+    "bgm",
+    "weather",
+    "productivity",
+    "work",
+    "focus",
+    "ambient"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:web\" \"npm run dev:api\"",
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:api": "cd apps/api && npm run dev",
+    "build": "npm run build:web && npm run build:api",
+    "build:web": "cd apps/web && npm run build",
+    "build:api": "cd apps/api && npm run build",
+    "start": "npm run start:api",
+    "start:web": "cd apps/web && npm run start",
+    "start:api": "cd apps/api && npm run start",
+    "test": "npm run test:web && npm run test:api",
+    "test:web": "cd apps/web && npm run test",
+    "test:api": "cd apps/api && npm run test",
+    "lint": "npm run lint:web && npm run lint:api",
+    "lint:web": "cd apps/web && npm run lint",
+    "lint:api": "cd apps/api && npm run lint",
+    "type-check": "npm run type-check:web && npm run type-check:api",
+    "type-check:web": "cd apps/web && npm run type-check",
+    "type-check:api": "cd apps/api && npm run type-check",
+    "db:migrate": "cd apps/api && npx prisma migrate dev",
+    "db:generate": "cd apps/api && npx prisma generate",
+    "db:reset": "cd apps/api && npx prisma migrate reset",
+    "db:studio": "cd apps/api && npx prisma studio",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "prepare": "husky install",
+    "clean": "rm -rf apps/*/dist apps/*/.next apps/*/node_modules node_modules"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "concurrently": "^8.2.2",
+    "husky": "^8.0.3",
+    "lint-staged": "^15.2.0",
+    "prettier": "^3.1.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "lint-staged": {
+    "**/*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "**/*.{md,json}": [
+      "prettier --write"
+    ]
+  },
+  "license": "MIT"
+}

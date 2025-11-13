@@ -1,0 +1,169 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String?
+  timezone     String   @default("UTC")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  profile      UserProfile?
+  generatedBgm GeneratedBgm[]
+  playlists    Playlist[]
+  activities   UserActivity[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  id                String   @id @default(uuid())
+  userId            String   @unique @map("user_id")
+  preferences       Json     @default("{}")
+  workSchedule      Json     @default("{}") @map("work_schedule")
+  musicPreferences  Json     @default("{}") @map("music_preferences")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model GeneratedBgm {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  title            String?
+  audioUrl         String   @map("audio_url")
+  duration         Int      // seconds
+  metadata         Json     @default("{}")
+  environmentData  Json     @default("{}") @map("environment_data")
+  generationParams Json     @default("{}") @map("generation_params")
+  playCount        Int      @default(0) @map("play_count")
+  userRating       Int?     @map("user_rating") // 1-5 rating
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playlistTracks PlaylistTrack[]
+  activities     UserActivity[]
+
+  @@map("generated_bgm")
+}
+
+model Playlist {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  name        String
+  description String?
+  isPublic    Boolean  @default(false) @map("is_public")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tracks PlaylistTrack[]
+
+  @@map("playlists")
+}
+
+model PlaylistTrack {
+  id         String   @id @default(uuid())
+  playlistId String   @map("playlist_id")
+  bgmId      String   @map("bgm_id")
+  position   Int
+  addedAt    DateTime @default(now()) @map("added_at")
+
+  // Relations
+  playlist Playlist     @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  bgm      GeneratedBgm @relation(fields: [bgmId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, position])
+  @@map("playlist_tracks")
+}
+
+model UserActivity {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  bgmId          String   @map("bgm_id")
+  activityType   String   @map("activity_type") // 'play', 'skip', 'like', 'download'
+  durationPlayed Int?     @map("duration_played") // seconds
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bgm  GeneratedBgm @relation(fields: [bgmId], references: [id], onDelete: Cascade)
+
+  @@map("user_activity")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// Indexes for performance optimization
+model CacheEntry {
+  key       String   @id
+  value     String
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("cache_entries")
+}
+
+// Analytics and monitoring
+model ApiUsage {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  endpoint   String
+  method     String
+  statusCode Int      @map("status_code")
+  duration   Int      // milliseconds
+  ipAddress  String   @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([endpoint])
+  @@index([createdAt])
+  @@map("api_usage")
+}
+
+model ErrorLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  error      String
+  stack      String?
+  context    Json     @default("{}")
+  severity   String   @default("error") // 'info', 'warn', 'error', 'fatal'
+  resolved   Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([severity])
+  @@index([createdAt])
+  @@index([resolved])
+  @@map("error_logs")
+}

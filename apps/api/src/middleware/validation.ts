@@ -1,0 +1,85 @@
+import { Request, Response, NextFunction } from 'express';
+import { z, ZodSchema } from 'zod';
+import { AppError } from './errorHandler';
+
+/**
+ * Zodスキーマによるバリデーションミドルウェア
+ */
+export const validate = (schema: ZodSchema) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      schema.parse({
+        body: req.body,
+        query: req.query,
+        params: req.params,
+      });
+      next();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const errorMessages = error.errors.map((err) => ({
+          field: err.path.join('.'),
+          message: err.message,
+        }));
+        
+        return res.status(400).json({
+          success: false,
+          message: 'Validation error',
+          errors: errorMessages,
+        });
+      }
+      next(error);
+    }
+  };
+};
+
+/**
+ * リクエストボディのバリデーション
+ */
+export const validateBody = (schema: ZodSchema) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      req.body = schema.parse(req.body);
+      next();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const errorMessages = error.errors.map((err) => ({
+          field: err.path.join('.'),
+          message: err.message,
+        }));
+        
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid request body',
+          errors: errorMessages,
+        });
+      }
+      next(error);
+    }
+  };
+};
+
+/**
+ * クエリパラメータのバリデーション
+ */
+export const validateQuery = (schema: ZodSchema) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      req.query = schema.parse(req.query);
+      next();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const errorMessages = error.errors.map((err) => ({
+          field: err.path.join('.'),
+          message: err.message,
+        }));
+        
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid query parameters',
+          errors: errorMessages,
+        });
+      }
+      next(error);
+    }
+  };
+};

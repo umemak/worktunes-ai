@@ -88,8 +88,16 @@ app.use(errorHandler);
 // Database connections
 async function startServer() {
   try {
-    // Connect to PostgreSQL
-    await connectDatabase();
+    // Connect to PostgreSQL (skip if not available)
+    if (process.env.DATABASE_URL) {
+      try {
+        await connectDatabase();
+      } catch (dbError) {
+        logger.warn('Database connection failed, running without database:', dbError);
+      }
+    } else {
+      logger.warn('DATABASE_URL not set, running without database');
+    }
 
     // Start the server
     app.listen(PORT, () => {

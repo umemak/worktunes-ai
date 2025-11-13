@@ -1,0 +1,37 @@
+name = "worktunes-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "worktunes-db"
+database_id = "" # Run: wrangler d1 create worktunes-db
+
+# KV Namespaces for caching
+[[kv_namespaces]]
+binding = "CACHE"
+id = "" # Run: wrangler kv:namespace create CACHE
+
+[[kv_namespaces]]
+binding = "SESSION"
+id = "" # Run: wrangler kv:namespace create SESSION
+
+# Environment Variables
+[vars]
+ENVIRONMENT = "development"
+
+# Secrets (set with wrangler secret put)
+# wrangler secret put JWT_SECRET
+# wrangler secret put JWT_REFRESH_SECRET
+# wrangler secret put ELEVENLABS_API_KEY
+# wrangler secret put OPENWEATHER_API_KEY
+
+# Build configuration
+[build]
+command = "npm run build"
+
+# Routes
+routes = [
+  { pattern = "api.worktunes.ai/*", zone_name = "worktunes.ai" }
+]

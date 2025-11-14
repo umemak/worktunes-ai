@@ -6,19 +6,15 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 
-import { errorHandler } from './middleware/errorHandler';
-import { notFoundHandler } from './middleware/notFoundHandler';
-import { authMiddleware } from './middleware/auth';
-import { logger } from './utils/logger';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { authenticateToken } from './middleware/auth';
+import logger from './utils/logger';
 import { connectDatabase } from './config/database';
-import { connectRedis } from './config/redis';
 
 // Routes
 import authRoutes from './routes/auth';
-import userRoutes from './routes/user';
 import bgmRoutes from './routes/bgm';
 import environmentRoutes from './routes/environment';
-import playlistRoutes from './routes/playlist';
 
 // Load environment variables
 dotenv.config();
@@ -62,11 +58,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Logging
-if (process.env.NODE_ENV === 'production') {
-  app.use(morgan('combined', { stream: { write: (message) => logger.info(message.trim()) } }));
-} else {
-  app.use(morgan('dev'));
-}
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // Apply rate limiting
 app.use(limiter);
@@ -83,10 +75,11 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/user', authMiddleware, userRoutes);
-app.use('/api/bgm', authMiddleware, bgmRoutes);
+app.use('/api/bgm', bgmRoutes);
 app.use('/api/environment', environmentRoutes);
-app.use('/api/playlist', authMiddleware, playlistRoutes);
+// TODO: 他のルートは後で実装
+// app.use('/api/user', authenticateToken, userRoutes);
+// app.use('/api/playlist', authenticateToken, playlistRoutes);
 
 // Error handling middleware
 app.use(notFoundHandler);
@@ -95,13 +88,16 @@ app.use(errorHandler);
 // Database connections
 async function startServer() {
   try {
-    // Connect to PostgreSQL
-    await connectDatabase();
-    logger.info('Connected to PostgreSQL database');
-
-    // Connect to Redis
-    await connectRedis();
-    logger.info('Connected to Redis cache');
+    // Connect to PostgreSQL (skip if not available)
+    if (process.env.DATABASE_URL) {
+      try {
+        await connectDatabase();
+      } catch (dbError) {
+        logger.warn('Database connection failed, running without database:', dbError);
+      }
+    } else {
+      logger.warn('DATABASE_URL not set, running without database');
+    }
 
     // Start the server
     app.listen(PORT, () => {

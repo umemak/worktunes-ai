@@ -1,64 +1,130 @@
 import Redis from 'ioredis';
-import logger from '../utils/logger';
+import { logger } from '../utils/logger';
 
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+/**
+ * Redis Client インスタンス
+ */
+let redis: Redis | null = null;
 
-export const redis = new Redis(redisUrl, {
-  maxRetriesPerRequest: 3,
-  retryStrategy: (times) => {
-    const delay = Math.min(times * 50, 2000);
-    return delay;
-  },
-});
-
-redis.on('connect', () => {
-  logger.info('Redis connected successfully');
-});
-
-redis.on('error', (error) => {
-  logger.error('Redis connection error:', error);
-});
-
-// Redisキャッシュヘルパー関数
-export const cache = {
-  async get<T>(key: string): Promise<T | null> {
-    try {
-      const data = await redis.get(key);
-      return data ? JSON.parse(data) : null;
-    } catch (error) {
-      logger.error(`Cache get error for key ${key}:`, error);
-      return null;
-    }
-  },
-
-  async set(key: string, value: any, ttlSeconds?: number): Promise<void> {
-    try {
-      const data = JSON.stringify(value);
-      if (ttlSeconds) {
-        await redis.setex(key, ttlSeconds, data);
-      } else {
-        await redis.set(key, data);
+/**
+ * Redisクライアント取得
+ */
+export const getRedisClient = (): Redis => {
+  if (!redis) {
+    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+    
+    redis = new Redis(redisUrl, {
+      maxRetriesPerRequest: 3,
+      retryStrategy: (times) => {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+      },
+      reconnectOnError: (err) => {
+        logger.error('Redis connection error', err);
+        return true;
       }
-    } catch (error) {
-      logger.error(`Cache set error for key ${key}:`, error);
-    }
-  },
+    });
 
-  async del(key: string): Promise<void> {
-    try {
-      await redis.del(key);
-    } catch (error) {
-      logger.error(`Cache delete error for key ${key}:`, error);
-    }
-  },
+    redis.on('connect', () => {
+      logger.info('Connected to Redis');
+    });
 
-  async exists(key: string): Promise<boolean> {
-    try {
-      const result = await redis.exists(key);
-      return result === 1;
-    } catch (error) {
-      logger.error(`Cache exists error for key ${key}:`, error);
-      return false;
-    }
-  },
+    redis.on('error', (err) => {
+      logger.error('Redis error', err);
+    });
+
+    redis.on('close', () => {
+      logger.warn('Redis connection closed');
+    });
+  }
+
+  return redis;
 };
+
+/**
+ * Redis接続
+ */
+export const connectRedis = async (): Promise<void> => {
+  try {
+    const client = getRedisClient();
+    await client.ping();
+    logger.info('Successfully connected to Redis');
+  } catch (error) {
+    logger.warn('Redis connection failed, continuing without cache', error);
+    // Redisは必須ではないため、エラーでもサーバーは起動可能
+  }
+};
+
+/**
+ * Redis切断
+ */
+export const disconnectRedis = async (): Promise<void> => {
+  try {
+    if (redis) {
+      await redis.quit();
+      logger.info('Disconnected from Redis');
+      redis = null;
+    }
+  } catch (error) {
+    logger.error('Error disconnecting from Redis', error);
+  }
+};
+
+/**
+ * キャッシュ取得
+ */
+export const getCache = async <T = any>(key: string): Promise<T | null> => {
+  try {
+    const client = getRedisClient();
+    const value = await client.get(key);
+    return value ? JSON.parse(value) : null;
+  } catch (error) {
+    logger.error('Failed to get cache', { key, error });
+    return null;
+  }
+};
+
+/**
+ * キャッシュ設定
+ */
+export const setCache = async (
+  key: string,
+  value: any,
+  expirationSeconds: number = 3600
+): Promise<void> => {
+  try {
+    const client = getRedisClient();
+    await client.setex(key, expirationSeconds, JSON.stringify(value));
+  } catch (error) {
+    logger.error('Failed to set cache', { key, error });
+  }
+};
+
+/**
+ * キャッシュ削除
+ */
+export const deleteCache = async (key: string): Promise<void> => {
+  try {
+    const client = getRedisClient();
+    await client.del(key);
+  } catch (error) {
+    logger.error('Failed to delete cache', { key, error });
+  }
+};
+
+/**
+ * パターンマッチでキャッシュクリア
+ */
+export const clearCachePattern = async (pattern: string): Promise<void> => {
+  try {
+    const client = getRedisClient();
+    const keys = await client.keys(pattern);
+    if (keys.length > 0) {
+      await client.del(...keys);
+    }
+  } catch (error) {
+    logger.error('Failed to clear cache pattern', { pattern, error });
+  }
+};
+
+export default getRedisClient;

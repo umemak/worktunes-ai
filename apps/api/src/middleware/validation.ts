@@ -1,30 +1,28 @@
 import { Request, Response, NextFunction } from 'express';
-import { z, ZodSchema } from 'zod';
+import { ZodSchema, ZodError } from 'zod';
 import { AppError } from './errorHandler';
 
 /**
- * Zodスキーマによるバリデーションミドルウェア
+ * Zodスキーマを使用したリクエスト検証ミドルウェア
  */
-export const validate = (schema: ZodSchema) => {
+export const validateRequest = (schema: ZodSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
-      schema.parse({
-        body: req.body,
-        query: req.query,
-        params: req.params,
-      });
+      // リクエストボディを検証
+      const validated = schema.parse(req.body);
+      req.body = validated;
       next();
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        const errorMessages = error.errors.map((err) => ({
+      if (error instanceof ZodError) {
+        const errorMessages = error.errors.map(err => ({
           field: err.path.join('.'),
-          message: err.message,
+          message: err.message
         }));
-        
+
         return res.status(400).json({
           success: false,
-          message: 'Validation error',
-          errors: errorMessages,
+          error: 'Validation failed',
+          details: errorMessages
         });
       }
       next(error);
@@ -33,50 +31,52 @@ export const validate = (schema: ZodSchema) => {
 };
 
 /**
- * リクエストボディのバリデーション
- */
-export const validateBody = (schema: ZodSchema) => {
-  return (req: Request, res: Response, next: NextFunction) => {
-    try {
-      req.body = schema.parse(req.body);
-      next();
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const errorMessages = error.errors.map((err) => ({
-          field: err.path.join('.'),
-          message: err.message,
-        }));
-        
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid request body',
-          errors: errorMessages,
-        });
-      }
-      next(error);
-    }
-  };
-};
-
-/**
- * クエリパラメータのバリデーション
+ * クエリパラメータ検証
  */
 export const validateQuery = (schema: ZodSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
-      req.query = schema.parse(req.query);
+      const validated = schema.parse(req.query);
+      req.query = validated as any;
       next();
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        const errorMessages = error.errors.map((err) => ({
+      if (error instanceof ZodError) {
+        const errorMessages = error.errors.map(err => ({
           field: err.path.join('.'),
-          message: err.message,
+          message: err.message
         }));
-        
+
         return res.status(400).json({
           success: false,
-          message: 'Invalid query parameters',
-          errors: errorMessages,
+          error: 'Query validation failed',
+          details: errorMessages
+        });
+      }
+      next(error);
+    }
+  };
+};
+
+/**
+ * パラメータ検証
+ */
+export const validateParams = (schema: ZodSchema) => {
+  return (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const validated = schema.parse(req.params);
+      req.params = validated as any;
+      next();
+    } catch (error) {
+      if (error instanceof ZodError) {
+        const errorMessages = error.errors.map(err => ({
+          field: err.path.join('.'),
+          message: err.message
+        }));
+
+        return res.status(400).json({
+          success: false,
+          error: 'Parameter validation failed',
+          details: errorMessages
         });
       }
       next(error);

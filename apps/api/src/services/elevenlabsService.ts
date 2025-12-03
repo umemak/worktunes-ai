@@ -89,7 +89,7 @@ export class ElevenLabsService {
         `${this.apiUrl}/text-to-sound-effects`,
         {
           text: prompt,
-          duration_seconds: Math.min(duration, 22), // ElevenLabsは最大22秒
+          duration_seconds: Math.min(duration, 30), // ElevenLabs v2は最大30秒
           prompt_influence: 0.3
         },
         {

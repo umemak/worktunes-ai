@@ -341,10 +341,10 @@ router.get('/providers', async (_req: Request, res: Response) => {
           apiKeyConfigured: !!process.env.HUGGINGFACE_API_TOKEN
         },
         elevenlabs: {
-          name: 'ElevenLabs Sound Effects',
+          name: 'ElevenLabs Sound Effects v2',
           description: 'Professional sound generation API',
-          maxDuration: 22,
-          features: ['High quality', 'Fast generation', 'Natural language prompts'],
+          maxDuration: 30,
+          features: ['Highest quality', 'Fast generation', 'Natural language prompts', '48kHz sample rate'],
           requiresApiKey: true,
           apiKeyConfigured: !!process.env.ELEVENLABS_API_KEY
         }

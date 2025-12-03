@@ -72,7 +72,7 @@ async function testElevenLabs() {
       timestamp: new Date().toISOString()
     },
     workType: 'focus',
-    duration: 10, // ElevenLabsは最大22秒
+    duration: 15, // ElevenLabs v2は最大30秒
     mood: 'calm',
     genre: 'lo-fi'
   };
@@ -134,9 +134,10 @@ async function testElevenLabs() {
     console.log('🎉 Test completed successfully!\n');
 
     console.log('📝 Notes:');
-    console.log('- ElevenLabs generates high-quality audio quickly');
+    console.log('- ElevenLabs v2 generates high-quality audio quickly');
     console.log('- Free tier includes 10,000 characters per month');
-    console.log('- Audio duration is limited to 22 seconds');
+    console.log('- Audio duration is up to 30 seconds (v2 model)');
+    console.log('- 48kHz sample rate - industry standard quality');
     console.log('- Check your remaining credits at https://elevenlabs.io/\n');
 
   } catch (error: any) {

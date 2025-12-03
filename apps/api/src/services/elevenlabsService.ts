@@ -84,14 +84,13 @@ export class ElevenLabsService {
     retryCount = 0
   ): Promise<Buffer> {
     try {
-      // ElevenLabs Text-to-Sound-Effects API
+      // ElevenLabs Music Generation API（最大5分 = 300秒）
       const response = await axios.post(
-        `${this.apiUrl}/text-to-sound-effects`,
+        `${this.apiUrl}/music/compose`,
         {
-          text: prompt,
-          duration_seconds: Math.min(duration, 30), // ElevenLabs v2は最大30秒
-          prompt_influence: 0.3,
-          looping: duration > 30 // 30秒以上の場合はループ可能な音楽を生成
+          prompt: prompt,
+          duration_ms: Math.min(duration * 1000, 300000), // 最大300秒 = 5分
+          style: 'instrumental' // vocal または instrumental
         },
         {
           headers: {

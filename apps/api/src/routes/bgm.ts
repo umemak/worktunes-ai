@@ -1,6 +1,6 @@
 import express from 'express';
 import { Request, Response } from 'express';
-import { BGMRequestSchema, BGMResponse } from '../../../packages/types';
+import { BGMRequestSchema } from '@worktunes/types';
 import { GensparkMusicService } from '../services/gensparkMusicServiceV2';
 import { optionalAuth } from '../middleware/auth';
 import { validateRequest } from '../middleware/validation';
@@ -34,21 +34,21 @@ router.post('/generate',
       const bgmResponse = await gensparkMusicService.generateBGM(bgmRequest);
 
       // データベースに生成記録を保存
-      const savedBgm = await prisma.generatedBgm.create({
+      await prisma.generatedBgm.create({
         data: {
           id: bgmResponse.id,
           userId: userId,
           title: bgmResponse.metadata.title,
           audioUrl: bgmResponse.audioUrl,
           duration: bgmResponse.metadata.duration,
-          metadata: bgmResponse.metadata,
-          environmentData: bgmRequest.environment,
-          generationParams: {
+          metadata: JSON.stringify(bgmResponse.metadata),
+          environmentData: JSON.stringify(bgmRequest.environment),
+          generationParams: JSON.stringify({
             workType: bgmRequest.workType,
             genre: bgmRequest.genre,
             mood: bgmRequest.mood,
             modelUsed: 'genspark_multi_model'
-          }
+          })
         }
       });
 
@@ -73,12 +73,12 @@ router.post('/generate',
         message: 'BGM generated successfully'
       });
 
-    } catch (error) {
+    } catch (error: any) {
       logger.error('BGM generation failed', error);
       res.status(500).json({
         success: false,
         error: 'BGM generation failed',
-        message: error.message
+        message: error?.message || 'Unknown error'
       });
     }
   }
@@ -124,12 +124,12 @@ router.get('/history',
         }
       });
 
-    } catch (error) {
+    } catch (error: any) {
       logger.error('Failed to fetch BGM history', error);
       res.status(500).json({
         success: false,
         error: 'Failed to fetch BGM history',
-        message: error.message
+        message: error?.message || 'Unknown error'
       });
     }
   }
@@ -154,10 +154,11 @@ router.get('/:id',
       });
 
       if (!bgm) {
-        return res.status(404).json({
+        res.status(404).json({
           success: false,
           error: 'BGM not found'
         });
+        return;
       }
 
       // 再生回数を増加
@@ -167,13 +168,15 @@ router.get('/:id',
       });
 
       // アクティビティログ
-      await prisma.userActivity.create({
-        data: {
-          userId,
-          bgmId: id,
-          activityType: 'play'
-        }
-      });
+      if (userId) {
+        await prisma.userActivity.create({
+          data: {
+            userId,
+            bgmId: id,
+            activityType: 'play'
+          }
+        });
+      }
 
       res.json({
         success: true,
@@ -212,13 +215,15 @@ router.post('/:id/feedback',
 
       // アクティビティログ
       const activityType = skipReason ? 'skip' : 'like';
-      await prisma.userActivity.create({
-        data: {
-          userId,
-          bgmId: id,
-          activityType
-        }
-      });
+      if (userId) {
+        await prisma.userActivity.create({
+          data: {
+            userId,
+            bgmId: id,
+            activityType
+          }
+        });
+      }
 
       logger.info('BGM feedback received', {
         userId,
@@ -261,10 +266,11 @@ router.delete('/:id',
       });
 
       if (deleted.count === 0) {
-        return res.status(404).json({
+        res.status(404).json({
           success: false,
           error: 'BGM not found or access denied'
         });
+        return;
       }
 
       logger.info('BGM deleted', { userId, bgmId: id });

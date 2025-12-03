@@ -90,7 +90,8 @@ export class ElevenLabsService {
         {
           text: prompt,
           duration_seconds: Math.min(duration, 30), // ElevenLabs v2は最大30秒
-          prompt_influence: 0.3
+          prompt_influence: 0.3,
+          looping: duration > 30 // 30秒以上の場合はループ可能な音楽を生成
         },
         {
           headers: {

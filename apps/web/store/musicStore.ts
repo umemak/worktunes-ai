@@ -1,1 +1,195 @@
-import { create } from 'zustand';\nimport { BGMRequest, BGMResponse } from '@worktunes/types';\n\ninterface MusicState {\n  // 現在の状態\n  currentTrack: BGMResponse | null;\n  isPlaying: boolean;\n  isGenerating: boolean;\n  volume: number;\n  \n  // 履歴・プレイリスト\n  recentTracks: BGMResponse[];\n  playlist: BGMResponse[];\n  \n  // エラー状態\n  error: string | null;\n  \n  // アクション\n  setCurrentTrack: (track: BGMResponse) => void;\n  play: () => void;\n  pause: () => void;\n  skip: () => void;\n  setVolume: (volume: number) => void;\n  \n  // BGM生成\n  generateBGM: (request: BGMRequest) => Promise<void>;\n  \n  // 履歴管理\n  addToRecent: (track: BGMResponse) => void;\n  clearRecent: () => void;\n  \n  // エラー管理\n  setError: (error: string | null) => void;\n  clearError: () => void;\n}\n\nexport const useMusicStore = create<MusicState>((set, get) => ({\n  // 初期状態\n  currentTrack: null,\n  isPlaying: false,\n  isGenerating: false,\n  volume: 0.7,\n  recentTracks: [],\n  playlist: [],\n  error: null,\n\n  // 基本制御\n  setCurrentTrack: (track) => {\n    set({ currentTrack: track, isPlaying: false });\n    get().addToRecent(track);\n  },\n\n  play: () => {\n    const { currentTrack } = get();\n    if (currentTrack) {\n      set({ isPlaying: true });\n    }\n  },\n\n  pause: () => {\n    set({ isPlaying: false });\n  },\n\n  skip: () => {\n    const { recentTracks } = get();\n    if (recentTracks.length > 1) {\n      // 次の楽曲があれば再生\n      const currentIndex = recentTracks.findIndex(\n        track => track.id === get().currentTrack?.id\n      );\n      const nextTrack = recentTracks[currentIndex + 1] || recentTracks[0];\n      get().setCurrentTrack(nextTrack);\n    } else {\n      // 楽曲がない場合は停止\n      set({ isPlaying: false });\n    }\n  },\n\n  setVolume: (volume) => {\n    set({ volume: Math.max(0, Math.min(1, volume)) });\n  },\n\n  // BGM生成\n  generateBGM: async (request: BGMRequest) => {\n    try {\n      set({ isGenerating: true, error: null });\n      \n      const response = await fetch('/api/bgm/generate', {\n        method: 'POST',\n        headers: {\n          'Content-Type': 'application/json',\n          'Authorization': `Bearer ${localStorage.getItem('authToken')}`\n        },\n        body: JSON.stringify(request)\n      });\n\n      if (!response.ok) {\n        const errorData = await response.json();\n        throw new Error(errorData.message || 'BGM generation failed');\n      }\n\n      const result = await response.json();\n      const bgmResponse: BGMResponse = result.data;\n      \n      // 生成成功\n      get().setCurrentTrack(bgmResponse);\n      set({ isGenerating: false });\n      \n      // 自動再生\n      setTimeout(() => {\n        get().play();\n      }, 500);\n      \n    } catch (error) {\n      console.error('BGM generation error:', error);\n      set({ \n        isGenerating: false, \n        error: error instanceof Error ? error.message : 'Unknown error occurred'\n      });\n    }\n  },\n\n  // 履歴管理\n  addToRecent: (track) => {\n    set(state => {\n      const filtered = state.recentTracks.filter(t => t.id !== track.id);\n      return {\n        recentTracks: [track, ...filtered].slice(0, 20) // 最新20件まで保持\n      };\n    });\n  },\n\n  clearRecent: () => {\n    set({ recentTracks: [] });\n  },\n\n  // エラー管理\n  setError: (error) => {\n    set({ error });\n  },\n\n  clearError: () => {\n    set({ error: null });\n  }\n}));\n\n// セレクター（パフォーマンス最適化用）\nexport const useCurrentTrack = () => useMusicStore(state => state.currentTrack);\nexport const useIsPlaying = () => useMusicStore(state => state.isPlaying);\nexport const useIsGenerating = () => useMusicStore(state => state.isGenerating);\nexport const useRecentTracks = () => useMusicStore(state => state.recentTracks);\nexport const useMusicError = () => useMusicStore(state => state.error);\n\nexport default useMusicStore;"
+import { create } from 'zustand';
+
+interface BGMResponse {
+  id: string;
+  audioUrl: string;
+  prompt: string;
+  timeOfDay: string;
+  weatherCondition: string;
+  musicParameters: {
+    mood: string;
+    instruments: string[];
+    bpm: number;
+    key: string[];
+    energy: string;
+  };
+  metadata: {
+    title: string;
+    duration: number;
+    genre: string;
+    bpm: number;
+    key: string;
+    mood: string;
+  };
+  generatedAt: Date;
+}
+
+interface BGMRequest {
+  environment: any;
+  workType: 'focus' | 'creative' | 'relaxed' | 'energetic';
+  duration: number;
+  genre?: string[];
+  mood?: string;
+}
+
+interface MusicState {
+  currentTrack: BGMResponse | null;
+  isPlaying: boolean;
+  isGenerating: boolean;
+  volume: number;
+  duration: number;
+  currentTime: number;
+  
+  recentTracks: BGMResponse[];
+  playlist: BGMResponse[];
+  
+  error: string | null;
+  
+  setCurrentTrack: (track: BGMResponse) => void;
+  play: () => void;
+  pause: () => void;
+  stop: () => void;
+  skip: () => void;
+  setVolume: (volume: number) => void;
+  seek: (time: number) => void;
+  
+  generateBGM: (request: BGMRequest) => Promise<void>;
+  
+  addToRecent: (track: BGMResponse) => void;
+  clearRecent: () => void;
+  
+  setError: (error: string | null) => void;
+  clearError: () => void;
+}
+
+export const useMusicStore = create<MusicState>((set, get) => ({
+  currentTrack: null,
+  isPlaying: false,
+  isGenerating: false,
+  volume: 0.7,
+  duration: 0,
+  currentTime: 0,
+  
+  recentTracks: [],
+  playlist: [],
+  
+  error: null,
+  
+  setCurrentTrack: (track) => {
+    set({ 
+      currentTrack: track,
+      duration: track.metadata.duration,
+      currentTime: 0
+    });
+    get().addToRecent(track);
+  },
+  
+  play: () => {
+    if (get().currentTrack) {
+      set({ isPlaying: true });
+    }
+  },
+  
+  pause: () => {
+    set({ isPlaying: false });
+  },
+  
+  stop: () => {
+    set({ isPlaying: false, currentTime: 0 });
+  },
+  
+  skip: () => {
+    const { recentTracks, currentTrack } = get();
+    if (recentTracks.length > 0) {
+      const currentIndex = recentTracks.findIndex(t => t.id === currentTrack?.id);
+      const nextTrack = recentTracks[currentIndex + 1] || recentTracks[0];
+      set({ currentTrack: nextTrack, isPlaying: true, currentTime: 0 });
+    }
+  },
+  
+  setVolume: (volume) => {
+    set({ volume: Math.max(0, Math.min(1, volume)) });
+  },
+  
+  seek: (time) => {
+    set({ currentTime: Math.max(0, Math.min(time, get().duration)) });
+  },
+  
+  generateBGM: async (request) => {
+    try {
+      set({ isGenerating: true, error: null });
+      
+      // モックデータ生成
+      const mockTrack: BGMResponse = {
+        id: `track_${Date.now()}`,
+        audioUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+        prompt: `${request.workType}作業用の環境適応型BGM`,
+        timeOfDay: request.environment?.timeOfDay || '午後',
+        weatherCondition: request.environment?.weather?.condition || '晴れ',
+        musicParameters: {
+          mood: request.mood || 'calm',
+          instruments: ['Piano', 'Strings', 'Ambient Pads'],
+          bpm: 90,
+          key: ['C major'],
+          energy: 'medium'
+        },
+        metadata: {
+          title: `${request.workType} BGM`,
+          duration: request.duration,
+          genre: request.genre?.[0] || 'Ambient',
+          bpm: 90,
+          key: 'C major',
+          mood: request.mood || 'calm'
+        },
+        generatedAt: new Date()
+      };
+      
+      set({ 
+        currentTrack: mockTrack,
+        duration: mockTrack.metadata.duration,
+        currentTime: 0,
+        isGenerating: false,
+        isPlaying: false
+      });
+      
+      get().addToRecent(mockTrack);
+      
+    } catch (error) {
+      console.error('BGM generation error:', error);
+      set({ 
+        isGenerating: false,
+        error: error instanceof Error ? error.message : 'Generation failed'
+      });
+    }
+  },
+  
+  addToRecent: (track) => {
+    const recent = get().recentTracks;
+    if (!recent.find(t => t.id === track.id)) {
+      set({ recentTracks: [track, ...recent].slice(0, 10) });
+    }
+  },
+  
+  clearRecent: () => {
+    set({ recentTracks: [] });
+  },
+  
+  setError: (error) => {
+    set({ error });
+  },
+  
+  clearError: () => {
+    set({ error: null });
+  }
+}));
+
+export const useCurrentTrack = () => 
+  useMusicStore(state => state.currentTrack);
+
+export const useIsPlaying = () => 
+  useMusicStore(state => state.isPlaying);
+
+export const useIsGenerating = () => 
+  useMusicStore(state => state.isGenerating);
+
+export default useMusicStore;

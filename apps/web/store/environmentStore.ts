@@ -1,1 +1,122 @@
-import { create } from 'zustand';\nimport { EnvironmentData } from '@worktunes/types';\n\ninterface EnvironmentState {\n  currentEnvironment: EnvironmentData | null;\n  isLoading: boolean;\n  error: string | null;\n  lastUpdated: Date | null;\n  \n  // 位置情報\n  userLocation: {\n    lat: number;\n    lon: number;\n    city?: string;\n  } | null;\n  \n  // アクション\n  fetchCurrentEnvironment: () => Promise<void>;\n  setUserLocation: (lat: number, lon: number) => void;\n  refreshEnvironment: () => Promise<void>;\n  setError: (error: string | null) => void;\n}\n\nexport const useEnvironmentStore = create<EnvironmentState>((set, get) => ({\n  // 初期状態\n  currentEnvironment: null,\n  isLoading: false,\n  error: null,\n  lastUpdated: null,\n  userLocation: null,\n\n  // 現在の環境データを取得\n  fetchCurrentEnvironment: async () => {\n    try {\n      set({ isLoading: true, error: null });\n      \n      // まず位置情報を取得（許可されている場合）\n      await get().requestGeolocation();\n      \n      const { userLocation } = get();\n      const params = new URLSearchParams();\n      \n      if (userLocation) {\n        params.append('lat', userLocation.lat.toString());\n        params.append('lon', userLocation.lon.toString());\n      }\n      \n      const response = await fetch(`/api/environment/current?${params}`);\n      \n      if (!response.ok) {\n        throw new Error('Failed to fetch environment data');\n      }\n      \n      const result = await response.json();\n      const environmentData: EnvironmentData = result.data;\n      \n      set({ \n        currentEnvironment: environmentData,\n        isLoading: false,\n        lastUpdated: new Date()\n      });\n      \n    } catch (error) {\n      console.error('Environment fetch error:', error);\n      \n      // フォールバック: デフォルト環境データを生成\n      const fallbackEnvironment = get().generateFallbackEnvironment();\n      \n      set({ \n        currentEnvironment: fallbackEnvironment,\n        isLoading: false,\n        error: error instanceof Error ? error.message : 'Unknown error',\n        lastUpdated: new Date()\n      });\n    }\n  },\n\n  // 位置情報の取得を試行\n  requestGeolocation: async () => {\n    return new Promise<void>((resolve) => {\n      if (!navigator.geolocation) {\n        resolve();\n        return;\n      }\n      \n      navigator.geolocation.getCurrentPosition(\n        (position) => {\n          const { latitude, longitude } = position.coords;\n          set({ \n            userLocation: { \n              lat: latitude, \n              lon: longitude \n            } \n          });\n          resolve();\n        },\n        (error) => {\n          console.warn('Geolocation denied:', error);\n          resolve(); // エラーでも続行\n        },\n        { \n          timeout: 10000,\n          enableHighAccuracy: false \n        }\n      );\n    });\n  },\n\n  // 手動で位置設定\n  setUserLocation: (lat: number, lon: number) => {\n    set({ userLocation: { lat, lon } });\n    // 位置が変更されたら環境データを再取得\n    get().fetchCurrentEnvironment();\n  },\n\n  // 環境データの更新\n  refreshEnvironment: async () => {\n    await get().fetchCurrentEnvironment();\n  },\n\n  // エラー設定\n  setError: (error: string | null) => {\n    set({ error });\n  },\n\n  // フォールバック環境データ生成\n  generateFallbackEnvironment: (): EnvironmentData => {\n    const now = new Date();\n    const hour = now.getHours();\n    const month = now.getMonth();\n    \n    // 時間帯を判定\n    let timeOfDay: EnvironmentData['timeOfDay'];\n    if (hour >= 5 && hour < 9) timeOfDay = 'morning';\n    else if (hour >= 9 && hour < 17) timeOfDay = 'afternoon';\n    else if (hour >= 17 && hour < 21) timeOfDay = 'evening';\n    else if (hour >= 21 && hour < 24) timeOfDay = 'night';\n    else timeOfDay = 'lateNight';\n    \n    // 季節を判定\n    let season: EnvironmentData['season'];\n    if (month >= 2 && month <= 4) season = 'spring';\n    else if (month >= 5 && month <= 7) season = 'summer';\n    else if (month >= 8 && month <= 10) season = 'autumn';\n    else season = 'winter';\n    \n    return {\n      timestamp: now,\n      timeOfDay,\n      weather: {\n        condition: 'cloudy', // デフォルト天気\n        temperature: 22,     // デフォルト温度\n        humidity: 60,        // デフォルト湿度\n        location: 'Unknown Location'\n      },\n      season\n    };\n  }\n}));\n\n// 便利なセレクター\nexport const useCurrentEnvironment = () => \n  useEnvironmentStore(state => state.currentEnvironment);\n\nexport const useEnvironmentLoading = () => \n  useEnvironmentStore(state => state.isLoading);\n\nexport const useEnvironmentError = () => \n  useEnvironmentStore(state => state.error);\n\nexport const useUserLocation = () => \n  useEnvironmentStore(state => state.userLocation);\n\n// 環境データの自動更新フック\nexport const useEnvironmentAutoUpdate = (intervalMinutes: number = 15) => {\n  const { fetchCurrentEnvironment } = useEnvironmentStore();\n  \n  React.useEffect(() => {\n    // 初回実行\n    fetchCurrentEnvironment();\n    \n    // 定期更新\n    const interval = setInterval(\n      fetchCurrentEnvironment, \n      intervalMinutes * 60 * 1000\n    );\n    \n    return () => clearInterval(interval);\n  }, [fetchCurrentEnvironment, intervalMinutes]);\n};\n\nexport default useEnvironmentStore;"
+import { create } from 'zustand';
+
+interface EnvironmentData {
+  timestamp: Date;
+  timeOfDay: 'morning' | 'afternoon' | 'evening' | 'night' | 'lateNight';
+  weather: {
+    condition: 'sunny' | 'cloudy' | 'rainy' | 'snowy' | 'stormy';
+    temperature: number;
+    humidity: number;
+    location: string;
+  };
+  season: 'spring' | 'summer' | 'autumn' | 'winter';
+}
+
+interface EnvironmentState {
+  currentEnvironment: EnvironmentData | null;
+  isLoading: boolean;
+  error: string | null;
+  lastUpdated: Date | null;
+  
+  userLocation: {
+    lat: number;
+    lon: number;
+    city?: string;
+  } | null;
+  
+  fetchCurrentEnvironment: () => Promise<void>;
+  setUserLocation: (lat: number, lon: number) => void;
+  refreshEnvironment: () => Promise<void>;
+  setError: (error: string | null) => void;
+  generateFallbackEnvironment: () => EnvironmentData;
+}
+
+export const useEnvironmentStore = create<EnvironmentState>((set, get) => ({
+  currentEnvironment: null,
+  isLoading: false,
+  error: null,
+  lastUpdated: null,
+  userLocation: null,
+
+  fetchCurrentEnvironment: async () => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      const fallbackEnvironment = get().generateFallbackEnvironment();
+      
+      set({ 
+        currentEnvironment: fallbackEnvironment,
+        isLoading: false,
+        error: null,
+        lastUpdated: new Date()
+      });
+      
+    } catch (error) {
+      console.error('Environment fetch error:', error);
+      
+      const fallbackEnvironment = get().generateFallbackEnvironment();
+      
+      set({ 
+        currentEnvironment: fallbackEnvironment,
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        lastUpdated: new Date()
+      });
+    }
+  },
+
+  setUserLocation: (lat: number, lon: number) => {
+    set({ userLocation: { lat, lon } });
+    get().fetchCurrentEnvironment();
+  },
+
+  refreshEnvironment: async () => {
+    await get().fetchCurrentEnvironment();
+  },
+
+  setError: (error: string | null) => {
+    set({ error });
+  },
+
+  generateFallbackEnvironment: (): EnvironmentData => {
+    const now = new Date();
+    const hour = now.getHours();
+    const month = now.getMonth();
+    
+    let timeOfDay: EnvironmentData['timeOfDay'];
+    if (hour >= 5 && hour < 9) timeOfDay = 'morning';
+    else if (hour >= 9 && hour < 17) timeOfDay = 'afternoon';
+    else if (hour >= 17 && hour < 21) timeOfDay = 'evening';
+    else if (hour >= 21 && hour < 24) timeOfDay = 'night';
+    else timeOfDay = 'lateNight';
+    
+    let season: EnvironmentData['season'];
+    if (month >= 2 && month <= 4) season = 'spring';
+    else if (month >= 5 && month <= 7) season = 'summer';
+    else if (month >= 8 && month <= 10) season = 'autumn';
+    else season = 'winter';
+    
+    return {
+      timestamp: now,
+      timeOfDay,
+      weather: {
+        condition: 'cloudy',
+        temperature: 22,
+        humidity: 60,
+        location: 'Tokyo, JP'
+      },
+      season
+    };
+  }
+}));
+
+export const useCurrentEnvironment = () => 
+  useEnvironmentStore(state => state.currentEnvironment);
+
+export const useEnvironmentLoading = () => 
+  useEnvironmentStore(state => state.isLoading);
+
+export const useEnvironmentError = () => 
+  useEnvironmentStore(state => state.error);
+
+export default useEnvironmentStore;

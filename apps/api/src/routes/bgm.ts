@@ -2,13 +2,18 @@ import express from 'express';
 import { Request, Response } from 'express';
 import { BGMRequestSchema } from '@worktunes/types';
 import { GensparkMusicService } from '../services/gensparkMusicServiceV2';
+import { MusicGenService } from '../services/musicgenService';
 import { optionalAuth } from '../middleware/auth';
 import { validateRequest } from '../middleware/validation';
 import { logger } from '../utils/logger';
 import { getPrismaClient } from '../config/database';
 
 const router = express.Router();
+
+// 音楽生成サービスの選択（環境変数で切り替え可能）
+const musicProvider = process.env.MUSIC_PROVIDER || 'genspark'; // 'genspark' or 'musicgen'
 const gensparkMusicService = new GensparkMusicService();
+const musicgenService = new MusicGenService();
 const prisma = getPrismaClient();
 
 /**
@@ -30,8 +35,10 @@ router.post('/generate',
         weather: bgmRequest.environment.weather.condition
       });
 
-      // Gensparkを使用してBGM生成
-      const bgmResponse = await gensparkMusicService.generateBGM(bgmRequest);
+      // 音楽生成サービスを選択して実行
+      const bgmResponse = musicProvider === 'musicgen'
+        ? await musicgenService.generateBGM(bgmRequest)
+        : await gensparkMusicService.generateBGM(bgmRequest);
 
       // データベースに生成記録を保存
       await prisma.generatedBgm.create({
@@ -47,7 +54,7 @@ router.post('/generate',
             workType: bgmRequest.workType,
             genre: bgmRequest.genre,
             mood: bgmRequest.mood,
-            modelUsed: 'genspark_multi_model'
+            modelUsed: musicProvider === 'musicgen' ? 'facebook/musicgen-small' : 'genspark_multi_model'
           })
         }
       });

@@ -7,14 +7,11 @@ import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
-import { authenticateToken } from './middleware/auth';
 import logger from './utils/logger';
 import { connectDatabase } from './config/database';
 
 // Routes
-import authRoutes from './routes/auth';
 import bgmRoutes from './routes/bgm';
-import environmentRoutes from './routes/environment';
 
 // Load environment variables
 dotenv.config();
@@ -64,7 +61,7 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(limiter);
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
@@ -74,10 +71,7 @@ app.get('/health', (req, res) => {
 });
 
 // API routes
-app.use('/api/auth', authRoutes);
 app.use('/api/bgm', bgmRoutes);
-app.use('/api/environment', environmentRoutes);
-// TODO: 他のルートは後で実装
 // app.use('/api/user', authenticateToken, userRoutes);
 // app.use('/api/playlist', authenticateToken, playlistRoutes);
 

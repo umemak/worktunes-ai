@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { BGMRequestSchema } from '@worktunes/types';
 import { GensparkMusicService } from '../services/gensparkMusicServiceV2';
 import { MusicGenService } from '../services/musicgenService';
+import { ElevenLabsService } from '../services/elevenlabsService';
 import { optionalAuth } from '../middleware/auth';
 import { validateRequest } from '../middleware/validation';
 import { logger } from '../utils/logger';
@@ -11,9 +12,11 @@ import { getPrismaClient } from '../config/database';
 const router = express.Router();
 
 // 音楽生成サービスの選択（環境変数で切り替え可能）
-const musicProvider = process.env.MUSIC_PROVIDER || 'genspark'; // 'genspark' or 'musicgen'
+// 'genspark', 'musicgen', 'elevenlabs' のいずれか
+const musicProvider = process.env.MUSIC_PROVIDER || 'genspark';
 const gensparkMusicService = new GensparkMusicService();
 const musicgenService = new MusicGenService();
+const elevenlabsService = new ElevenLabsService();
 const prisma = getPrismaClient();
 
 /**
@@ -36,9 +39,19 @@ router.post('/generate',
       });
 
       // 音楽生成サービスを選択して実行
-      const bgmResponse = musicProvider === 'musicgen'
-        ? await musicgenService.generateBGM(bgmRequest)
-        : await gensparkMusicService.generateBGM(bgmRequest);
+      let bgmResponse;
+      switch (musicProvider) {
+        case 'elevenlabs':
+          bgmResponse = await elevenlabsService.generateBGM(bgmRequest);
+          break;
+        case 'musicgen':
+          bgmResponse = await musicgenService.generateBGM(bgmRequest);
+          break;
+        case 'genspark':
+        default:
+          bgmResponse = await gensparkMusicService.generateBGM(bgmRequest);
+          break;
+      }
 
       // データベースに生成記録を保存
       await prisma.generatedBgm.create({
@@ -54,7 +67,11 @@ router.post('/generate',
             workType: bgmRequest.workType,
             genre: bgmRequest.genre,
             mood: bgmRequest.mood,
-            modelUsed: musicProvider === 'musicgen' ? 'facebook/musicgen-small' : 'genspark_multi_model'
+            modelUsed: musicProvider === 'elevenlabs' 
+              ? 'elevenlabs/eleven_multilingual_v2' 
+              : musicProvider === 'musicgen' 
+                ? 'facebook/musicgen-small' 
+                : 'genspark_multi_model'
           })
         }
       });
@@ -296,5 +313,102 @@ router.delete('/:id',
     }
   }
 );
+
+/**
+ * プロバイダー情報取得
+ * GET /api/bgm/providers
+ */
+router.get('/providers', async (_req: Request, res: Response) => {
+  try {
+    const providers = {
+      current: musicProvider,
+      available: ['genspark', 'musicgen', 'elevenlabs'],
+      details: {
+        genspark: {
+          name: 'Genspark Multi-Model',
+          description: 'Multiple AI models with environment adaptation',
+          maxDuration: 180,
+          features: ['Multi-model selection', 'Environment-adaptive', 'High quality'],
+          requiresApiKey: true,
+          apiKeyConfigured: !!process.env.GENSPARK_TOKEN
+        },
+        musicgen: {
+          name: 'MusicGen (Hugging Face)',
+          description: 'Meta\'s open-source music generation model',
+          maxDuration: 30,
+          features: ['Free to use', 'Text-to-music', 'Open source'],
+          requiresApiKey: true,
+          apiKeyConfigured: !!process.env.HUGGINGFACE_API_TOKEN
+        },
+        elevenlabs: {
+          name: 'ElevenLabs Sound Effects',
+          description: 'Professional sound generation API',
+          maxDuration: 22,
+          features: ['High quality', 'Fast generation', 'Natural language prompts'],
+          requiresApiKey: true,
+          apiKeyConfigured: !!process.env.ELEVENLABS_API_KEY
+        }
+      }
+    };
+
+    res.json({
+      success: true,
+      data: providers
+    });
+
+  } catch (error: any) {
+    logger.error('Failed to get provider info', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get provider info'
+    });
+  }
+});
+
+/**
+ * プロバイダーヘルスチェック
+ * GET /api/bgm/health/:provider
+ */
+router.get('/health/:provider', async (req: Request, res: Response) => {
+  try {
+    const { provider } = req.params;
+    let isHealthy = false;
+
+    switch (provider) {
+      case 'elevenlabs':
+        isHealthy = await elevenlabsService.healthCheck();
+        break;
+      case 'musicgen':
+        isHealthy = await musicgenService.healthCheck();
+        break;
+      case 'genspark':
+        // Gensparkのヘルスチェックは環境変数の存在確認
+        isHealthy = !!process.env.GENSPARK_TOKEN;
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid provider'
+        });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        provider,
+        healthy: isHealthy,
+        timestamp: new Date().toISOString()
+      }
+    });
+
+  } catch (error: any) {
+    logger.error('Provider health check failed', error);
+    res.status(500).json({
+      success: false,
+      error: 'Health check failed',
+      message: error.message
+    });
+  }
+});
 
 export default router;
